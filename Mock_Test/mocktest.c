@@ -30,6 +30,7 @@ char* str_lower(char* str){
 	return ret;
 }
 
+// malloc a new memory, then copy string str
 char* mstrncpy(char* str, int length){
 	char* ret = malloc((length + 1) * sizeof(char));
 	strncpy(ret, str, length);
@@ -83,14 +84,20 @@ int main(int argc, char* argv[]){
 		}
 	}
 
+	// arguments for getline
 	char *line = NULL;
 	size_t linecap = 0;
 	ssize_t linelen;
+	// counter and previous line string
 	int count = 1;
 	char *prev = NULL;
+	// read input line by line
 	while((linelen = getline(&line, &linecap, ifp)) > 0){
+		// Since getline will read \n as well, but we don't want the output be chaos
+		// Replace the \n to \0
 		if(line[linelen - 1] == '\n')
 			line[--linelen] = '\0';
+		// For first line, just update prev
 		if(prev == NULL){
 			prev = mstrncpy(line, linelen);
 			count = 1;
@@ -111,6 +118,7 @@ int main(int argc, char* argv[]){
 			}
 			// reset counter, update prev
 			count = 1;
+			// Remember to free the space, since we use mstrncpy malloc new string everytime
 			free(prev);
 			prev = mstrncpy(line, linelen);
 		}
@@ -120,7 +128,6 @@ int main(int argc, char* argv[]){
 		}
 	}
 	// output the last result
-	//output_current(ofp, &count, &prev);
 	if(!(u_flag && count > 1)){
 		if(c_flag == 1){
 			fprintf(ofp, "%4d %s\n", count, prev);
