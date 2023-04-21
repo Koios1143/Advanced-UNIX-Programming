@@ -38,6 +38,17 @@ char* mstrncpy(char* str, int length){
 	return ret;
 }
 
+void output_result(FILE* ofp, int count, char* prev){
+	if(!(u_flag && count > 1)){
+		if(c_flag == 1){
+			fprintf(ofp, "%4d %s\n", count, prev);
+		}
+		else{
+			fprintf(ofp, "%s\n", prev);
+		}
+	}
+}
+
 int main(int argc, char* argv[]){
 	// declare input_file_pointer and output_file_pointer
 	FILE *ifp = stdin, *ofp = stdout;
@@ -105,21 +116,19 @@ int main(int argc, char* argv[]){
 		}
 		// ignore flag is on, and current string different from previous or
 		// ignore flag is off, and current string different from previos
-		if((i_flag == 1 && (strcmp(str_lower(prev), str_lower(line))) != 0) ||
+		char *lower_prev = (i_flag == 1) ? str_lower(prev) : NULL;
+		char *lower_line = (i_flag == 1) ? str_lower(line) : NULL;
+		if((i_flag == 1 && (strcmp(lower_prev, lower_line)) != 0) ||
 		   (i_flag == 0 && (strcmp(prev, line) != 0))){
-			// if we should output the current result
-			if(!(u_flag && count > 1)){
-				if(c_flag == 1){
-					fprintf(ofp, "%4d %s\n", count, prev);
-				}
-				else{
-					fprintf(ofp, "%s\n", prev);
-				}
-			}
+			// output current result if we should
+			output_result(ofp, count, prev);
 			// reset counter, update prev
 			count = 1;
 			// Remember to free the space, since we use mstrncpy malloc new string everytime
 			free(prev);
+			// Also when lowercase, we generate new string, free it
+			free(lower_line);
+			free(lower_prev);
 			prev = mstrncpy(line, linelen);
 		}
 		else{
@@ -128,13 +137,6 @@ int main(int argc, char* argv[]){
 		}
 	}
 	// output the last result
-	if(!(u_flag && count > 1)){
-		if(c_flag == 1){
-			fprintf(ofp, "%4d %s\n", count, prev);
-		}
-		else{
-			fprintf(ofp, "%s\n", prev);
-		}
-	}
+	output_result(ofp, count, prev);
 	return 0;
 }
