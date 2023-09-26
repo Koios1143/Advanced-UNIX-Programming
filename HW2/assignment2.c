@@ -3,8 +3,12 @@
 #include"unistd.h"
 #include"fcntl.h"
 #include"stdio.h"
-int main(int argc, char *argv[]){
+#include"errno.h"
 
+extern int errno;
+
+int main(int argc, char *argv[]){
+    
     // check arguments
     // arguments should include "filename", "source_file" and "dest_file"
     if(argc == 1){
@@ -29,9 +33,11 @@ int main(int argc, char *argv[]){
 
     // open dest_file
     int dest_fd = open(dest_file, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+
+    // Since we don't know which error occurred, use errno might be better
     if(dest_fd == -1){
-        fprintf(stderr, "Some error occurred.");
-        return 3;
+        fprintf(stderr, "Error occurred with error code %d\n", errno);
+        return errno;
     }
 
     // read source and write destination
