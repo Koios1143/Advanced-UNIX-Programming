@@ -8,9 +8,8 @@
 extern int errno;
 
 int main(int argc, char *argv[]){
-    
     // check arguments
-    // arguments should include "filename", "source_file" and "dest_file"
+    // which should include "filename", "source_file" and "dest_file"
     if(argc == 1){
         fprintf(stderr, "cp: missing file operand\n");
         return 1;
@@ -23,7 +22,7 @@ int main(int argc, char *argv[]){
     char *source_file = argv[1];
     char *dest_file = argv[2];
     
-    // check source_file exists
+    // open source_file and check if source_file exists
     int source_fd = open(source_file, O_RDONLY);
     if(source_fd == -1){
         fprintf(stderr, "cp: cannot stat '%s': No such file or directory\n", source_file);
@@ -31,31 +30,34 @@ int main(int argc, char *argv[]){
         return 2;
     }
 
-    // open dest_file
+    // open dest_file and check if there's an error
     int dest_fd = open(dest_file, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-
-    // Since we don't know which error occurred, use errno might be better
     if(dest_fd == -1){
-        fprintf(stderr, "Error occurred with error code %d\n", errno);
+        perror("Error occurred: ");
         return errno;
     }
 
     // read source and write destination
     char buffer[4096];
     int read_sz;
-    // read start from begining
+
+    // read and write from the beginning of the files
     lseek(source_fd, 0, SEEK_SET);
-    lseek(dest_fd, 0, SEEK_SET); // temp
+    lseek(dest_fd, 0, SEEK_SET);
+
     while((read_sz = read(source_fd, buffer, sizeof(buffer))) > 0){
-        // move to the end of the dest file
-        // temp remove lseek(dest_fd, 0, SEEK_END);
         // write the content
-        write(dest_fd, buffer, read_sz);
+        if (write(dest_fd, buffer, read_sz) == -1)
+            fprintf(stderr, "write error");
+            
         // move to next step
         lseek(source_fd, read_sz, SEEK_CUR);
-        lseek(dest_fd, read_sz, SEEK_CUR); // temp
+        lseek(dest_fd, read_sz, SEEK_CUR);
     }
+
+    // close the files
     close(source_fd);
     close(dest_fd);
+
     return 0;
 }
