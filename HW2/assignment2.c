@@ -49,10 +49,6 @@ int main(int argc, char *argv[]){
         // write the content
         if (write(dest_fd, buffer, read_sz) == -1)
             fprintf(stderr, "write error");
-            
-        // move to next step
-        lseek(source_fd, read_sz, SEEK_CUR);
-        lseek(dest_fd, read_sz, SEEK_CUR);
     }
 
     // close the files
