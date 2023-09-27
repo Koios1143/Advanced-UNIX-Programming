@@ -45,13 +45,15 @@ int main(int argc, char *argv[]){
     int read_sz;
     // read start from begining
     lseek(source_fd, 0, SEEK_SET);
+    lseek(dest_fd, 0, SEEK_SET); // temp
     while((read_sz = read(source_fd, buffer, sizeof(buffer))) > 0){
         // move to the end of the dest file
-        lseek(dest_fd, 0, SEEK_END);
+        // temp remove lseek(dest_fd, 0, SEEK_END);
         // write the content
         write(dest_fd, buffer, read_sz);
         // move to next step
         lseek(source_fd, read_sz, SEEK_CUR);
+        lseek(dest_fd, read_sz, SEEK_CUR); // temp
     }
     close(source_fd);
     close(dest_fd);
