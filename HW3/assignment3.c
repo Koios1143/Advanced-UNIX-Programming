@@ -190,28 +190,23 @@ static int mstream_close(void *cookie) {
 int main(){
     // Write "hello, world" in the file stream
     char *buf = malloc(100);
-    FILE *fp = fmemopen(buf, 100, "w");
+    FILE *fp = fmemopen(buf, 100, "w+");
     fprintf(fp, "hello, world");
-    fclose(fp);
 
     // Seek the position of "world" in the file stream
-    // Read the world "world" from the file stream and print it
-    fp = fmemopen(buf, 100, "r");
     fseek(fp, 7, SEEK_SET);
+    
+    // Read the world "world" from the file stream and print it.
     char *buf2 = malloc(100);
     fread(buf2, 1, 5, fp);
     printf("%s\n", buf2);
-    fclose(fp);
-
     // Then, print the whole sentence "hello, world".
-    fp = fmemopen(buf, 100, "r");
+    fseek(fp, 0, SEEK_SET);
     char *buf3 = malloc(100);
     fread(buf3, 1, 12, fp);
     printf("%s\n", buf3);
-    fclose(fp);
 
     // Close the file stream correctly
-    fp = fmemopen(buf, 100, "r");
     fclose(fp);
     free(buf);
     free(buf2);
