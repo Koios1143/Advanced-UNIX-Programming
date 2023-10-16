@@ -1,215 +1,194 @@
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<unistd.h>
+#define MIN(a, b) ((a<b) ? a : b)
+#define MAX(a, b) ((a>b) ? a : b)
+typedef struct {
+	char	*buf; // buffer
+	int	size; // buffer size in bytes
+	int 	len;  // data length in bytes
+	int	off;  // current offset
+}fmemopen_cookie_t;
+
+int readfn(void *cookie, char *buf, int nbytes);
+int writefn(void *cookie, const char *buf, int nbytes);
+fpos_t seekfn(void *cookie, fpos_t offset, int whence);
+int closefn(void *cookie);
+
 /*
- * Our internal structure tracking a memory stream
+ * Function: fmemopen
+ * ------------------
+ * 	A stream open function, return a FILE pointer
+ *
+ * @param buf 	A buffer for file operations
+ * @param size 	Buffer size
+ * @param mode	File open mode
+ * @return	A FILE pointer on success, otherwise a NULL pointer
  */
-struct memstream {
-    char *buf;     /* in-memory buffer */
-    size_t rsize;  /* real size of buffer */
-    size_t vsize;  /* virtual size of buffer */
-    size_t curpos; /* current position in buffer */
-    int flags;     /* see below */
-};
-/* flags */
-#define MS_READ 0x01     /* open for reading */
-#define MS_WRITE 0x02    /* open for writing */
-#define MS_APPEND 0x04   /* append to stream */
-#define MS_TRUNCATE 0x08 /* truncate the stream on open */
-#define MS_MYBUF 0x10    /* free buffer on close */
-#ifndef MIN
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#endif
-static int mstream_read(void *, char *, int);
-static int mstream_write(void *, const char *, int);
-static fpos_t mstream_seek(void *, fpos_t, int);
-static int mstream_close(void *);
-static int type_to_flags(const char *__restrict type);
-static off_t find_end(char *buf, size_t len);
-FILE *fmemopen(void *__restrict buf, size_t size, const char *__restrict type) {
-    struct memstream *ms;
-    FILE *fp;
-    if (size == 0) {
-        errno = EINVAL;
-        return (NULL);
-    }
-    if ((ms = malloc(sizeof(struct memstream))) == NULL) {
-        errno = ENOMEM;
-        return (NULL);
-    }
-    if ((ms->flags = type_to_flags(type)) == 0) {
-        errno = EINVAL;
-        free(ms);
-        return (NULL);
-    }
-    if (buf == NULL) {
-        if ((ms->flags & (MS_READ | MS_WRITE)) != (MS_READ | MS_WRITE)) {
-            errno = EINVAL;
-            free(ms);
-            return (NULL);
-        }
-        if ((ms->buf = malloc(size)) == NULL) {
-            errno = ENOMEM;
-            free(ms);
-            return (NULL);
-        }
-        ms->rsize = size;
-        ms->flags |= MS_MYBUF;
-        ms->curpos = 0;
-    } else {
-        ms->buf = buf;
-        ms->rsize = size;
-        if (ms->flags & MS_APPEND)
-            ms->curpos = find_end(ms->buf, ms->rsize);
-        else
-            ms->curpos = 0;
-    }
-    if (ms->flags & MS_APPEND) { /* "a" mode */
-        ms->vsize = ms->curpos;
-    } else if (ms->flags & MS_TRUNCATE) { /* "w" mode */
-        ms->vsize = 0;
-    } else { /* "r" mode */
-        ms->vsize = size;
-    }
-    fp = funopen(ms, mstream_read, mstream_write, mstream_seek, mstream_close);
-    if (fp == NULL) {
-        if (ms->flags & MS_MYBUF) free(ms->buf);
-        free(ms);
-    }
-    return (fp);
+FILE *fmemopen(void *restrict buf, size_t size, const char *mode){
+	// If buf is NULL, we should allocate a memory with size bytes of memory
+	if(buf == NULL) buf = malloc(size * sizeof(char));
+
+	// Initialize a cookie for stream
+	fmemopen_cookie_t *c = malloc(sizeof(fmemopen_cookie_t));
+	c->buf = buf;
+	c->size = size;
+	c->len = 0;
+	c->off = 0;
+
+	// Handle modes
+	// I think we don't need to implement x, b in this assignment
+	if(mode == NULL) return NULL;
+	int read_flag = 0;
+	int write_flag = 0;
+	switch(mode[0]){
+		case 'r':
+			read_flag = 1;
+			c->len = c->size;
+			break;
+		case 'w':
+			write_flag = 1;
+			break;
+		case 'a':
+			write_flag = 1;
+			c->len = strnlen(c->buf, c->size);
+			c->off = strnlen(c->buf, c->size);
+			break;
+		default:
+			return NULL;
+	}
+	if(strlen(mode) >= 2 && mode[1] == '+'){
+		read_flag = write_flag = 1;
+	}
+	
+	return	funopen(c,
+			((read_flag == 1) ? readfn : NULL),
+			((write_flag == 1) ? writefn : NULL),
+			seekfn,
+			closefn);
 }
-static int type_to_flags(const char *__restrict type) {
-    const char *cp;
-    int flags = 0;
-    for (cp = type; *cp != 0; cp++) {
-        switch (*cp) {
-            case 'r':
-                if (flags != 0) return (0); /* error */
-                flags |= MS_READ;
-                break;
-            case 'w':
-                if (flags != 0) return (0); /* error */
-                flags |= MS_WRITE | MS_TRUNCATE;
-                break;
-            case 'a':
-                if (flags != 0) return (0); /* error */
-                flags |= MS_APPEND;
-                break;
-            case '+':
-                if (flags == 0) return (0); /* error */
-                flags |= MS_READ | MS_WRITE;
-                break;
-            case 'b':
-                if (flags == 0) return (0); /* error */
-                break;
-            default:
-                return (0); /* error */
-        }
-    }
-    return (flags);
+
+/*
+ * Function: readfn
+ * ----------------
+ *  	Read file stream to specific buffer
+ *
+ * @param cookie	Metadata of file stream
+ * @param buf		Buffer
+ * @param nbytes	Number of bytes to read
+ * @return		Number of bytes been read
+ */
+int readfn(void *cookie, char *buf, int nbytes){
+	fmemopen_cookie_t *c = (fmemopen_cookie_t*)(cookie);
+	nbytes = MIN(nbytes, c->len - c->off);
+	if(nbytes <= 0) return 0;
+	strncpy(buf, c->buf, nbytes);
+	c->off += nbytes;
+	return nbytes;
 }
-static off_t find_end(char *buf, size_t len) {
-    off_t off = 0;
-    while (off < len) {
-        if (buf[off] == 0) break;
-        off++;
-    }
-    return (off);
+
+/*
+ * Function: writefn
+ * -----------------
+ *	Write to file stream
+ *
+ * @param cookie	Metadata of file stream
+ * @param buf		Buffer
+ * @param nbytes	Number of bytes to write
+ * @return		Number of bytes been wriiten
+ */
+int writefn(void *cookie, const char *buf, int nbytes){
+	fmemopen_cookie_t *c = (fmemopen_cookie_t*)(cookie);
+	nbytes = MIN(nbytes, c->size - c->off - 1); // -1 for ending '\0'
+	if(nbytes <= 0) return 0;
+	strncpy(c->buf, buf, nbytes);
+	c->off += nbytes;
+	c->len  = MAX(c->off, c->size - 1);
+	c->buf[c->off] = '\0';
+	return nbytes;
 }
-static int mstream_read(void *cookie, char *buf, int len) {
-    int nr;
-    struct memstream *ms = cookie;
-    if (!(ms->flags & MS_READ)) {
-        errno = EBADF;
-        return (-1);
-    }
-    if (ms->curpos >= ms->vsize) return (0);
-    /* can only read from curpos to vsize */
-    nr = MIN(len, ms->vsize - ms->curpos);
-    memcpy(buf, ms->buf + ms->curpos, nr);
-    ms->curpos += nr;
-    return (nr);
+
+/*
+ * Function: seekfn
+ * ----------------
+ *  	Seek to specific offset with condition whence of file stream
+ *
+ * @param cookie	Metadata of file stream
+ * @param offset	Number of byte offsets
+ * @param whence	Define the entry point and offset count
+ * @return		Resulting seek position in bytes
+ */
+fpos_t seekfn(void *cookie, fpos_t offset, int whence){
+	fmemopen_cookie_t *c = (fmemopen_cookie_t*)(cookie);
+	switch(whence){
+		case SEEK_SET:
+			if(offset >= c->size || offset < 0) return -1;
+			c->off = offset;
+			break;
+		case SEEK_CUR:
+			if(c->off + offset >= c->size || c->off + offset < 0) return -1;
+			c->off += offset;
+			break;
+		case SEEK_END:
+			if(c->size + offset < 0 || c->size + offset >= c->size) return -1;
+			c->off = c->size + offset;
+			break;
+		case SEEK_HOLE:
+			if(offset >= c->size || offset < 0) return -1;
+			while(c->buf[offset] != 0 && offset < c->size) offset++;
+			if(offset >= c->size) return -1;
+			c->off = offset;
+			break;
+		case SEEK_DATA:
+			if(offset >= c->size || offset < 0) return -1;
+			while(c->buf[offset] == 0 && offset < c->size) offset++;
+			if(offset >= c->size) return -1;
+			c->off = offset;
+			break;
+		default:
+			return -1;
+	}
+	return c->off;
 }
-static int mstream_write(void *cookie, const char *buf, int len) {
-    int nw, off;
-    struct memstream *ms = cookie;
-    if (!(ms->flags & (MS_APPEND | MS_WRITE))) {
-        errno = EBADF;
-        return (-1);
-    }
-    if (ms->flags & MS_APPEND)
-        off = ms->vsize;
-    else
-        off = ms->curpos;
-    nw = MIN(len, ms->rsize - off);
-    memcpy(ms->buf + off, buf, nw);
-    ms->curpos = off + nw;
-    if (ms->curpos > ms->vsize) {
-        ms->vsize = ms->curpos;
-        if (((ms->flags & (MS_READ | MS_WRITE)) == (MS_READ | MS_WRITE)) &&
-            (ms->vsize < ms->rsize))
-            *(ms->buf + ms->vsize) = 0;
-    }
-    if ((ms->flags & (MS_WRITE | MS_APPEND)) && !(ms->flags & MS_READ)) {
-        if (ms->curpos < ms->rsize)
-            *(ms->buf + ms->curpos) = 0;
-        else
-            *(ms->buf + ms->rsize - 1) = 0;
-    }
-    return (nw);
+
+/*
+ * Function: closefn
+ * -----------------
+ *	Close a file stream
+ *
+ * @param cookie	Metadata of file stream
+ * @return 		0 if success, otherwise -1
+ */
+int closefn(void *cookie){
+	fmemopen_cookie_t* c = (fmemopen_cookie_t*)(cookie);
+	free(c); // we are not able to check whether free is success or not
+	return 0;
 }
-static fpos_t mstream_seek(void *cookie, fpos_t pos, int whence) {
-    int off;
-    struct memstream *ms = cookie;
-    switch (whence) {
-        case SEEK_SET:
-            off = pos;
-            break;
-        case SEEK_END:
-            off = ms->vsize + pos;
-            break;
-        case SEEK_CUR:
-            off = ms->curpos + pos;
-            break;
-    }
-    if (off < 0 || off > ms->vsize) {
-        errno = EINVAL;
-        return -1;
-    }
-    ms->curpos = off;
-    return (off);
-}
-static int mstream_close(void *cookie) {
-    struct memstream *ms = cookie;
-    if (ms->flags & MS_MYBUF) free(ms->buf);
-    free(ms);
-    return (0);
-}
+
 
 int main(){
-    // Write "hello, world" in the file stream
-    char *buf = malloc(100);
-    FILE *fp = fmemopen(buf, 100, "w+");
-    fprintf(fp, "hello, world");
+	// Task1: Write "hello, world" in the file stream
+	char *buf = malloc(100);
+	FILE *fp = fmemopen(buf, 100, "w+");
+	fprintf(fp, "hello, world");
 
-    // Seek the position of "world" in the file stream
-    fseek(fp, 7, SEEK_SET);
-    
-    // Read the world "world" from the file stream and print it.
-    char *buf2 = malloc(100);
-    fread(buf2, 1, 5, fp);
-    printf("%s\n", buf2);
-    // Then, print the whole sentence "hello, world".
-    fseek(fp, 0, SEEK_SET);
-    char *buf3 = malloc(100);
-    fread(buf3, 1, 12, fp);
-    printf("%s\n", buf3);
+	// Task2: Seek the position of "world" in the file stream
+	fseek(fp, 7, SEEK_SET);
 
-    // Close the file stream correctly
-    fclose(fp);
-    free(buf);
-    free(buf2);
-    free(buf3);
-    return 0;
+	// Task3: Read the word "world" from the file stream and print it. Then, print the whole sentence "hello, world".
+	char *buf2 = malloc(100);
+	fread(buf2, sizeof(char), 5, fp);
+	printf("%s\n", buf2);
+	fseek(fp, 0, SEEK_SET);
+	char *buf3 = malloc(100);
+	fread(buf3, sizeof(char), sizeof("hello, world"), fp);
+	printf("%s\n", buf3);
+	
+	// Task4: Close the file stream correctly
+	fclose(fp);
+
+	// Don't forget to free the buffer
+	free(buf);
+	return 0;
 }
