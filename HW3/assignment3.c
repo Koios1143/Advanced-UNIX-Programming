@@ -177,13 +177,13 @@ int main(){
 	fseek(fp, 7, SEEK_SET);
 
 	// Task3: Read the word "world" from the file stream and print it. Then, print the whole sentence "hello, world".
-	char *buf2 = malloc(100);
-	fread(buf2, sizeof(char), 5, fp);
-	printf("%s\n", buf2);
+	buf = malloc(100);
+	fread(buf, sizeof(char), 5, fp);
+	printf("%s\n", buf);
 	fseek(fp, 0, SEEK_SET);
-	char *buf3 = malloc(100);
-	fread(buf3, sizeof(char), sizeof("hello, world"), fp);
-	printf("%s\n", buf3);
+	buf = malloc(100);
+	fread(buf, sizeof(char), 12, fp);
+	printf("%s\n", buf);
 	
 	// Task4: Close the file stream correctly
 	fclose(fp);
