@@ -83,7 +83,7 @@ int readfn(void *cookie, char *buf, int nbytes){
 	fmemopen_cookie_t *c = (fmemopen_cookie_t*)(cookie);
 	nbytes = MIN(nbytes, c->len - c->off);
 	if(nbytes <= 0) return 0;
-	strncpy(buf, c->buf, nbytes);
+	strncpy(buf, c->buf + c->off, nbytes);
 	c->off += nbytes;
 	return nbytes;
 }
@@ -102,7 +102,7 @@ int writefn(void *cookie, const char *buf, int nbytes){
 	fmemopen_cookie_t *c = (fmemopen_cookie_t*)(cookie);
 	nbytes = MIN(nbytes, c->size - c->off - 1); // -1 for ending '\0'
 	if(nbytes <= 0) return 0;
-	strncpy(c->buf, buf, nbytes);
+	strncpy(c->buf + c->off, buf, nbytes);
 	c->off += nbytes;
 	c->len  = MAX(c->off, c->size - 1);
 	c->buf[c->off] = '\0';
