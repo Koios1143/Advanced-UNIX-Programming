@@ -1,0 +1,17 @@
+Bird
+Camel
+Elephant
+Fish
+KOALA
+Koala
+Shark
+Whale
+alligator
+bear
+camel
+dolphin
+fish
+koala
+lion
+shark
+whale
