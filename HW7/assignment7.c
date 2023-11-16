@@ -18,7 +18,7 @@ int main(){
 		// parent
 		//printf("\nOridinal Status: \n");
 		//sprintf(cmd, "%s %d\0", PSCMD, getpid());
-		system(cmd);
+		//system(cmd);
 	}
 	else{
 		// child
@@ -29,6 +29,6 @@ int main(){
 		system(cmd);
 		exit(0);
 	}
-	wait(NULL);
+	//wait(NULL);
 	return 0;
 }
