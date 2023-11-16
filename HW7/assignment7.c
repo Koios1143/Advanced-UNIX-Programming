@@ -29,6 +29,6 @@ int main(){
 		system(cmd);
 		exit(0);
 	}
-	//wait(NULL);
+	wait(NULL);
 	return 0;
 }
