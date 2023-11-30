@@ -61,6 +61,6 @@ int main(){
 	for(int i=0 ; i<5 ; i++){
 		pthread_join(tid[i], NULL);
 	}
-	//pthread_barrier_destroy_(&barrier);
+	pthread_barrier_destroy_(&barrier);
 	return 0;
 }
