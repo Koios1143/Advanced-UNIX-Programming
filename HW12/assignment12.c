@@ -44,7 +44,7 @@ int main(int argc, char *argv[])
 
 		/* TODO: Copy the file using mmap here */
 		char *src_buf = mmap(NULL, copysz, PROT_READ, MAP_SHARED, fdin, fsz);
-		close(fdin);
+		//close(fdin);
 		char *dst_buf = mmap(NULL, copysz, PROT_READ | PROT_WRITE, MAP_SHARED, fdout, fsz);
 		memcpy(dst_buf, src_buf, copysz);
 		fsz += copysz;
